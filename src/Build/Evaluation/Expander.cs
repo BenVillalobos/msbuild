@@ -444,7 +444,7 @@ namespace Microsoft.Build.Evaluation
         /// <summary>
         /// Returns true if the supplied string contains a valid property name
         /// </summary>
-        private static bool IsValidPropertyName(string propertyName)
+        private static bool IsValidPropertyName(ReadOnlySpan<char> propertyName)
         {
             if (propertyName.Length == 0 || !XmlUtilities.IsValidInitialElementNameCharacter(propertyName[0]))
             {
@@ -473,6 +473,161 @@ namespace Microsoft.Build.Evaluation
             bool potentialPropertyFunction = false;
             bool potentialRegistryFunction = false;
             return ScanForClosingParenthesis(expression, index, out potentialPropertyFunction, out potentialRegistryFunction);
+        }
+        private static int ScanForClosingParenthesis(ReadOnlySpan<char> expression, int index)
+        {
+            bool potentialPropertyFunction = false;
+            bool potentialRegistryFunction = false;
+            return ScanForClosingParenthesis(expression, index, out potentialPropertyFunction, out potentialRegistryFunction);
+        }
+
+        private static int ScanForClosingParenthesis(ReadOnlySpan<char> expression, int index, out bool potentialPropertyFunction, out bool potentialRegistryFunction)
+        {
+            int nestLevel = 1;
+            int length = expression.Length;
+
+            potentialPropertyFunction = false;
+            potentialRegistryFunction = false;
+
+            unsafe
+            {
+                fixed (char* pchar = expression)
+                {
+                    // Scan for our closing ')'
+                    while (index < length && nestLevel > 0)
+                    {
+                        char character = pchar[index];
+
+                        if (character == '\'' || character == '`' || character == '"')
+                        {
+                            index++;
+                            index = ScanForClosingQuote(character, expression, index);
+
+                            if (index < 0)
+                            {
+                                return -1;
+                            }
+                        }
+                        else if (character == '(')
+                        {
+                            nestLevel++;
+                        }
+                        else if (character == ')')
+                        {
+                            nestLevel--;
+                        }
+                        else if (character == '.' || character == '[' || character == '$')
+                        {
+                            potentialPropertyFunction = true;
+                        }
+                        else if (character == ':')
+                        {
+                            potentialRegistryFunction = true;
+                        }
+
+                        index++;
+                    }
+                }
+            }
+
+            // We will have parsed past the ')', so step back one character
+            index--;
+
+            return (nestLevel == 0) ? index : -1;
+        }
+
+        private static int ScanForClosingQuote(char quoteChar, ReadOnlySpan<char> expression, int index)
+        {
+            unsafe
+            {
+                fixed (char* pchar = expression)
+                {
+                    // Scan for our closing quoteChar
+                    while (index < expression.Length)
+                    {
+                        if (pchar[index] == quoteChar)
+                        {
+                            return index;
+                        }
+
+                        index++;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        private static string[] ExtractFunctionArguments(IElementLocation elementLocation, ReadOnlySpan<char> expressionFunction, ReadOnlySpan<char> argumentsString)
+        {
+            int argumentsContentLength = argumentsString.Length;
+
+            List<string> arguments = new List<string>();
+
+            // With the reuseable string builder, there's no particular need to initialize the length as it will already have grown.
+            using (var argumentBuilder = new ReuseableStringBuilder())
+            {
+                unsafe
+                {
+                    fixed (char* argumentsContent = argumentsString)
+                    {
+                        // Iterate over the contents of the arguments extracting the
+                        // the individual arguments as we go
+                        for (int n = 0; n < argumentsContentLength; n++)
+                        {
+                            // We found a property expression.. skip over all of it.
+                            if ((n < argumentsContentLength - 1) && (argumentsContent[n] == '$' && argumentsContent[n + 1] == '('))
+                            {
+                                int nestedPropertyStart = n;
+                                n += 2; // skip over the opening '$('
+
+                                // Scan for the matching closing bracket, skipping any nested ones
+                                n = ScanForClosingParenthesis(argumentsString, n);
+
+                                if (n == -1)
+                                {
+                                    ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedParenthesis"));
+                                }
+
+                                argumentBuilder.Append(argumentsString.ToString(), nestedPropertyStart, (n - nestedPropertyStart) + 1);
+                            }
+                            else if (argumentsContent[n] == '`' || argumentsContent[n] == '"' || argumentsContent[n] == '\'')
+                            {
+                                int quoteStart = n;
+                                n += 1; // skip over the opening quote
+
+                                n = ScanForClosingQuote(argumentsString[quoteStart], argumentsString, n);
+
+                                if (n == -1)
+                                {
+                                    ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedQuote"));
+                                }
+
+                                argumentBuilder.Append(argumentsString.ToString(), quoteStart, (n - quoteStart) + 1);
+                            }
+                            else if (argumentsContent[n] == ',')
+                            {
+                                // We have reached the end of the current argument, go ahead and add it
+                                // to our list
+                                AddArgument(arguments, argumentBuilder);
+
+                                // Clear out the argument builder ready for the next argument
+                                argumentBuilder.Remove(0, argumentBuilder.Length);
+                            }
+                            else
+                            {
+                                argumentBuilder.Append(argumentsContent[n]);
+                            }
+                        }
+                    }
+                }
+
+                // This will either be the one and only argument, or the last one
+                // so add it to our list
+                AddArgument(arguments, argumentBuilder);
+            }
+
+            return arguments.ToArray();
         }
 
         /// <summary>
@@ -1075,7 +1230,7 @@ namespace Microsoft.Build.Evaluation
 
                             // This is likely to be a function expression
                             propertyValue = ExpandPropertyBody(
-                                propertyBody,
+                                propertyBody.AsSpan(),
                                 null,
                                 properties,
                                 options,
@@ -1153,7 +1308,7 @@ namespace Microsoft.Build.Evaluation
             /// Expand the body of the property, including any functions that it may contain
             /// </summary>
             internal static object ExpandPropertyBody(
-                string propertyBody,
+                ReadOnlySpan<char> propertyBody,
                 object propertyValue,
                 IPropertyProvider<T> properties,
                 ExpanderOptions options,
@@ -1162,7 +1317,8 @@ namespace Microsoft.Build.Evaluation
                 IFileSystem fileSystem)
             {
                 Function<T> function = null;
-                string propertyName = propertyBody;
+                string propertyName = propertyBody.ToString();
+                ReadOnlySpan<char> bodyAsSpan = propertyBody;
 
                 // Trim the body for compatibility reasons:
                 // Spaces are not valid property name chars, but $( Foo ) is allowed, and should always expand to BLANK.
@@ -1171,17 +1327,18 @@ namespace Microsoft.Build.Evaluation
                 if (Char.IsWhiteSpace(propertyBody[0]) || Char.IsWhiteSpace(propertyBody[propertyBody.Length - 1]))
                 {
                     propertyBody = propertyBody.Trim();
+                    bodyAsSpan = bodyAsSpan.Trim();
                 }
 
                 // If we don't have a clean propertybody then we'll do deeper checks to see
                 // if what we have is a function
                 if (!IsValidPropertyName(propertyBody))
                 {
-                    if (propertyBody.Contains(".") || propertyBody[0] == '[')
+                    if (propertyBody.Contains(".".AsSpan(), StringComparison.OrdinalIgnoreCase) || propertyBody[0] == '[')
                     {
                         if (BuildParameters.DebugExpansion)
                         {
-                            Console.WriteLine("Expanding: {0}", propertyBody);
+                            Console.WriteLine("Expanding: {0}", propertyBody.ToString());
                         }
 
                         // This is a function
@@ -1203,23 +1360,23 @@ namespace Microsoft.Build.Evaluation
                         {
                             // In the event that we have been handed an unrecognized property body, throw
                             // an invalid function property exception.
-                            ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody, String.Empty);
+                            ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody.ToString(), String.Empty);
                             return null;
                         }
                     }
-                    else if (propertyValue == null && propertyBody.Contains("[")) // a single property indexer
+                    else if (propertyValue == null && propertyBody.Contains("[".AsSpan(), StringComparison.OrdinalIgnoreCase)) // a single property indexer
                     {
                         int indexerStart = propertyBody.IndexOf('[');
                         int indexerEnd = propertyBody.IndexOf(']');
 
                         if (indexerStart < 0 || indexerEnd < 0)
                         {
-                            ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody, AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedSquareBrackets"));
+                            ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody.ToString(), AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedSquareBrackets"));
                         }
                         else
                         {
-                            propertyValue = LookupProperty(properties, propertyBody, 0, indexerStart - 1, elementLocation, usedUninitializedProperties);
-                            propertyBody = propertyBody.Substring(indexerStart);
+                            propertyValue = LookupProperty(properties, propertyBody.ToString(), 0, indexerStart - 1, elementLocation, usedUninitializedProperties);
+                            propertyBody = propertyBody.Slice(indexerStart);
 
                             // recurse so that the function representing the indexer can be executed on the property value
                             return ExpandPropertyBody(
@@ -1236,7 +1393,7 @@ namespace Microsoft.Build.Evaluation
                     {
                         // In the event that we have been handed an unrecognized property body, throw
                         // an invalid function property exception.
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody, String.Empty);
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", propertyBody.ToString(), String.Empty);
                         return null;
                     }
                 }
@@ -1260,7 +1417,7 @@ namespace Microsoft.Build.Evaluation
                     }
                     catch (Exception) when (options.HasFlag(ExpanderOptions.LeavePropertiesUnexpandedOnError))
                     {
-                        propertyValue = propertyBody;
+                        propertyValue = propertyBody.ToString();
                     }
                 }
 
@@ -3110,7 +3267,7 @@ namespace Microsoft.Build.Evaluation
             /// Extract the function details from the given property function expression
             /// </summary>
             internal static Function<T> ExtractPropertyFunction(
-                string expressionFunction,
+                ReadOnlySpan<char> expressionFunction,
                 IElementLocation elementLocation,
                 object propertyValue,
                 UsedUninitializedProperties usedUnInitializedProperties,
@@ -3120,7 +3277,7 @@ namespace Microsoft.Build.Evaluation
                 FunctionBuilder<T> functionBuilder = new FunctionBuilder<T> {FileSystem = fileSystem};
 
                 // By default the expression root is the whole function expression
-                ReadOnlySpan<char> expressionRoot = expressionFunction.AsSpan();
+                ReadOnlySpan<char> expressionRoot = expressionFunction;
 
                 // The arguments for this function start at the first '('
                 // If there are no arguments, then we're a property getter
@@ -3133,21 +3290,21 @@ namespace Microsoft.Build.Evaluation
                 }
 
                 // In case we ended up with something we don't understand
-                ProjectErrorUtilities.VerifyThrowInvalidProject(!(expressionRoot == null || expressionRoot.IsEmpty), elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                ProjectErrorUtilities.VerifyThrowInvalidProject(!(expressionRoot == null || expressionRoot.IsEmpty), elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), String.Empty);
 
-                functionBuilder.Expression = expressionFunction;
+                functionBuilder.Expression = expressionFunction.ToString();
                 functionBuilder.UsedUninitializedProperties = usedUnInitializedProperties;
 
                 // This is a static method call
                 // A static method is the content that follows the last "::", the rest being the type
                 if (propertyValue == null && expressionRoot[0] == '[')
                 {
-                    var typeEndIndex = expressionFunction.IndexOf(']', 1);
+                    var typeEndIndex = expressionFunction.Slice(1).IndexOf(']');
 
                     if (typeEndIndex < 1)
                     {
                         // We ended up with something other than a function expression
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction, String.Empty);
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction.ToString(), String.Empty);
                     }
 
                     var typeName = expressionRoot.Slice(1, typeEndIndex - 1).ToString();
@@ -3161,7 +3318,7 @@ namespace Microsoft.Build.Evaluation
                     else
                     {
                         // We ended up with something other than a static function expression
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction, String.Empty);
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction.ToString(), String.Empty);
                     }
 
                     ConstructFunction(elementLocation, expressionFunction, argumentStartIndex, methodStartIndex, ref functionBuilder);
@@ -3172,18 +3329,18 @@ namespace Microsoft.Build.Evaluation
                     if (receiverType == null)
                     {
                         // We ended up with something other than a type
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionTypeUnavailable", expressionFunction, typeName);
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionTypeUnavailable", expressionFunction.ToString(), typeName);
                     }
 
                     functionBuilder.ReceiverType = receiverType;
                 }
                 else if (expressionFunction[0] == '[') // We have an indexer
                 {
-                    var indexerEndIndex = expressionFunction.IndexOf(']', 1);
+                    var indexerEndIndex = expressionFunction.Slice(1).IndexOf(']');
                     if (indexerEndIndex < 1)
                     {
                         // We ended up with something other than a function expression
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedSquareBrackets"));
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedSquareBrackets"));
                     }
 
                     var methodStartIndex = indexerEndIndex + 1;
@@ -3209,20 +3366,20 @@ namespace Microsoft.Build.Evaluation
                     var rootEndIndex = expressionRoot.IndexOf('.');
 
                     // If this is an instance function rather than a static, then we'll capture the name of the property referenced
-                    var functionReceiver = expressionRoot.Slice(0, rootEndIndex).Trim().ToString();
+                    var functionReceiver = expressionRoot.Slice(0, rootEndIndex).Trim();
 
                     // If propertyValue is null (we're not recursing), then we're expecting a valid property name
                     if (propertyValue == null && !IsValidPropertyName(functionReceiver))
                     {
                         // We extracted something that wasn't a valid property name, fail.
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), String.Empty);
                     }
 
                     // If we are recursively acting on a type that has been already produced then pass that type inwards (e.g. we are interpreting a function call chain)
                     // Otherwise, the receiver of the function is a string
                     var receiverType = propertyValue?.GetType() ?? typeof(string);
 
-                    functionBuilder.Receiver = functionReceiver;
+                    functionBuilder.Receiver = functionReceiver.ToString();
                     functionBuilder.ReceiverType = receiverType;
 
                     ConstructFunction(elementLocation, expressionFunction, argumentStartIndex, methodStartIndex, ref functionBuilder);
@@ -3412,7 +3569,7 @@ namespace Microsoft.Build.Evaluation
 
                     // Recursively expand the remaining property body after execution
                     return PropertyExpander<T>.ExpandPropertyBody(
-                        _remainder,
+                        _remainder.AsSpan(),
                         functionResult,
                         properties,
                         options,
@@ -4412,15 +4569,15 @@ namespace Microsoft.Build.Evaluation
             /// Extracts the name, arguments, binding flags, and invocation type for an indexer
             /// Also extracts the remainder of the expression that is not part of this indexer
             /// </summary>
-            private static void ConstructIndexerFunction(string expressionFunction, IElementLocation elementLocation, object propertyValue, int methodStartIndex, int indexerEndIndex, ref FunctionBuilder<T> functionBuilder)
+            private static void ConstructIndexerFunction(ReadOnlySpan<char> expressionFunction, IElementLocation elementLocation, object propertyValue, int methodStartIndex, int indexerEndIndex, ref FunctionBuilder<T> functionBuilder)
             {
-                string argumentsContent = expressionFunction.Substring(1, indexerEndIndex - 1);
-                string remainder = expressionFunction.Substring(methodStartIndex);
+                ReadOnlySpan<char> argumentsContent = expressionFunction.Slice(1, indexerEndIndex - 1);
+                ReadOnlySpan<char> remainder = expressionFunction.Slice(methodStartIndex);
                 string functionName;
                 string[] functionArguments;
 
                 // If there are no arguments, then just create an empty array
-                if (String.IsNullOrEmpty(argumentsContent))
+                if (argumentsContent == null || argumentsContent.IsEmpty)
                 {
                     functionArguments = Array.Empty<string>();
                 }
@@ -4448,14 +4605,14 @@ namespace Microsoft.Build.Evaluation
                 functionBuilder.Name = functionName;
                 functionBuilder.Arguments = functionArguments;
                 functionBuilder.BindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.InvokeMethod;
-                functionBuilder.Remainder = remainder;
+                functionBuilder.Remainder = remainder.ToString();
             }
 
             /// <summary>
             /// Extracts the name, arguments, binding flags, and invocation type for a static or instance function.
             /// Also extracts the remainder of the expression that is not part of this function
             /// </summary>
-            private static void ConstructFunction(IElementLocation elementLocation, string expressionFunction, int argumentStartIndex, int methodStartIndex, ref FunctionBuilder<T> functionBuilder)
+            private static void ConstructFunction(IElementLocation elementLocation, ReadOnlySpan<char> expressionFunction, int argumentStartIndex, int methodStartIndex, ref FunctionBuilder<T> functionBuilder)
             {
                 // The unevaluated and unexpanded arguments for this function
                 string[] functionArguments;
@@ -4469,14 +4626,14 @@ namespace Microsoft.Build.Evaluation
                 // The binding flags that we will use for this function's execution
                 BindingFlags defaultBindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public;
 
-                ReadOnlySpan<char> expressionFunctionAsSpan = expressionFunction.AsSpan();
+                ReadOnlySpan<char> expressionFunctionAsSpan = expressionFunction;
                 
                 ReadOnlySpan<char> expressionSubstringAsSpan = argumentStartIndex > -1 ? expressionFunctionAsSpan.Slice(methodStartIndex, argumentStartIndex - methodStartIndex) : ReadOnlySpan<char>.Empty;
 
                 // There are arguments that need to be passed to the function
                 if (argumentStartIndex > -1 && !expressionSubstringAsSpan.Contains(".".AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
-                    string argumentsContent;
+                    ReadOnlySpan<char> argumentsContent;
 
                     // separate the function and the arguments
                     functionName = expressionSubstringAsSpan.Trim();
@@ -4489,7 +4646,7 @@ namespace Microsoft.Build.Evaluation
 
                     if (argumentsEndIndex == -1)
                     {
-                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedParenthesis"));
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedParenthesis"));
                     }
 
                     // We have been asked for a method invocation
@@ -4498,16 +4655,16 @@ namespace Microsoft.Build.Evaluation
                     // It may be that there are '()' but no actual arguments content
                     if (argumentStartIndex == expressionFunction.Length - 1)
                     {
-                        argumentsContent = String.Empty;
+                        argumentsContent = ReadOnlySpan<char>.Empty;
                         functionArguments = Array.Empty<string>();
                     }
                     else
                     {
                         // we have content within the '()' so let's extract and deal with it
-                        argumentsContent = expressionFunction.Substring(argumentStartIndex, argumentsEndIndex - argumentStartIndex);
+                        argumentsContent = expressionFunction.Slice(argumentStartIndex, argumentsEndIndex - argumentStartIndex);
 
                         // If there are no arguments, then just create an empty array
-                        if (String.IsNullOrEmpty(argumentsContent))
+                        if (argumentsContent == null || argumentsContent.IsEmpty)
                         {
                             functionArguments = Array.Empty<string>();
                         }
@@ -4522,9 +4679,9 @@ namespace Microsoft.Build.Evaluation
                 }
                 else
                 {
-                    int nextMethodIndex = expressionFunction.IndexOf('.', methodStartIndex);
+                    int nextMethodIndex = expressionFunction.Slice(methodStartIndex).IndexOf('.');
                     int methodLength = expressionFunction.Length - methodStartIndex;
-                    int indexerIndex = expressionFunction.IndexOf('[', methodStartIndex);
+                    int indexerIndex = expressionFunction.Slice(methodStartIndex).IndexOf('[');
 
                     // We don't want to consume the indexer
                     if (indexerIndex >= 0 && indexerIndex < nextMethodIndex)
@@ -4542,7 +4699,7 @@ namespace Microsoft.Build.Evaluation
 
                     ReadOnlySpan<char> netPropertyName = expressionFunctionAsSpan.Slice(methodStartIndex, methodLength).Trim();
 
-                    ProjectErrorUtilities.VerifyThrowInvalidProject(netPropertyName.Length > 0, elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                    ProjectErrorUtilities.VerifyThrowInvalidProject(netPropertyName.Length > 0, elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), String.Empty);
 
                     // We have been asked for a property or a field
                     defaultBindingFlags |= (BindingFlags.GetProperty | BindingFlags.GetField);
@@ -4561,7 +4718,7 @@ namespace Microsoft.Build.Evaluation
                 else
                 {
                     // We ended up with something other than a function expression
-                    ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                    ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), String.Empty);
                 }
             }
 
