@@ -3307,6 +3307,130 @@ namespace Microsoft.Build.Evaluation
             /// Extract the function details from the given property function expression
             /// </summary>
             internal static Function<T> ExtractPropertyFunction(
+                string expressionFunction,
+                IElementLocation elementLocation,
+                object propertyValue,
+                UsedUninitializedProperties usedUnInitializedProperties,
+                IFileSystem fileSystem)
+            {
+                // Used to aggregate all the components needed for a Function
+                FunctionBuilder<T> functionBuilder = new FunctionBuilder<T> { FileSystem = fileSystem };
+
+                // By default the expression root is the whole function expression
+                var expressionRoot = expressionFunction;
+
+                // The arguments for this function start at the first '('
+                // If there are no arguments, then we're a property getter
+                var argumentStartIndex = expressionFunction.IndexOf('(');
+
+                // If we have arguments, then we only want the content up to but not including the '('
+                if (argumentStartIndex > -1)
+                {
+                    expressionRoot = expressionFunction.Substring(0, argumentStartIndex);
+                }
+
+                // In case we ended up with something we don't understand
+                ProjectErrorUtilities.VerifyThrowInvalidProject(!String.IsNullOrEmpty(expressionRoot), elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+
+                functionBuilder.Expression = expressionFunction;
+                functionBuilder.UsedUninitializedProperties = usedUnInitializedProperties;
+
+                // This is a static method call
+                // A static method is the content that follows the last "::", the rest being the type
+                if (propertyValue == null && expressionRoot[0] == '[')
+                {
+                    var typeEndIndex = expressionRoot.IndexOf(']', 1);
+
+                    if (typeEndIndex < 1)
+                    {
+                        // We ended up with something other than a function expression
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction, String.Empty);
+                    }
+
+                    var typeName = expressionRoot.Substring(1, typeEndIndex - 1);
+                    var methodStartIndex = typeEndIndex + 1;
+
+                    if (expressionRoot.Length > methodStartIndex + 2 && expressionRoot[methodStartIndex] == ':' && expressionRoot[methodStartIndex + 1] == ':')
+                    {
+                        // skip over the "::"
+                        methodStartIndex += 2;
+                    }
+                    else
+                    {
+                        // We ended up with something other than a static function expression
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionStaticMethodSyntax", expressionFunction, String.Empty);
+                    }
+
+                    ConstructFunction(elementLocation, expressionFunction, argumentStartIndex, methodStartIndex, ref functionBuilder);
+
+                    // Locate a type that matches the body of the expression.
+                    var receiverType = GetTypeForStaticMethod(typeName, functionBuilder.Name);
+
+                    if (receiverType == null)
+                    {
+                        // We ended up with something other than a type
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionTypeUnavailable", expressionFunction, typeName);
+                    }
+
+                    functionBuilder.ReceiverType = receiverType;
+                }
+                else if (expressionFunction[0] == '[') // We have an indexer
+                {
+                    var indexerEndIndex = expressionFunction.IndexOf(']', 1);
+                    if (indexerEndIndex < 1)
+                    {
+                        // We ended up with something other than a function expression
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedSquareBrackets"));
+                    }
+
+                    var methodStartIndex = indexerEndIndex + 1;
+
+                    functionBuilder.ReceiverType = propertyValue.GetType();
+
+                    ConstructIndexerFunction(expressionFunction, elementLocation, propertyValue, methodStartIndex, indexerEndIndex, ref functionBuilder);
+                }
+                else // This could be a property reference, or a chain of function calls
+                {
+                    // Look for an instance function call next, such as in SomeStuff.ToLower()
+                    var methodStartIndex = expressionRoot.IndexOf('.');
+                    if (methodStartIndex == -1)
+                    {
+                        // We don't have a function invocation in the expression root, return null
+                        return null;
+                    }
+
+                    // skip over the '.';
+                    methodStartIndex++;
+
+                    var rootEndIndex = expressionRoot.IndexOf('.');
+
+                    // If this is an instance function rather than a static, then we'll capture the name of the property referenced
+                    var functionReceiver = expressionRoot.AsSpan().Slice(0, rootEndIndex).Trim().ToString();
+
+                    // If propertyValue is null (we're not recursing), then we're expecting a valid property name
+                    if (propertyValue == null && !IsValidPropertyName(functionReceiver))
+                    {
+                        // We extracted something that wasn't a valid property name, fail.
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                    }
+
+                    // If we are recursively acting on a type that has been already produced then pass that type inwards (e.g. we are interpreting a function call chain)
+                    // Otherwise, the receiver of the function is a string
+                    var receiverType = propertyValue?.GetType() ?? typeof(string);
+
+                    functionBuilder.Receiver = functionReceiver;
+                    functionBuilder.ReceiverType = receiverType;
+
+                    ConstructFunction(elementLocation, expressionFunction, argumentStartIndex, methodStartIndex, ref functionBuilder);
+                }
+
+                return functionBuilder.Build();
+            }
+
+            /// <summary>
+            /// Extract the function details from the given property function expression
+            /// </summary>
+            internal static Function<T> ExtractPropertyFunction(
                 ReadOnlySpan<char> expressionFunction,
                 IElementLocation elementLocation,
                 object propertyValue,
