@@ -474,6 +474,14 @@ namespace Microsoft.Build.Evaluation
             bool potentialRegistryFunction = false;
             return ScanForClosingParenthesis(expression, index, out potentialPropertyFunction, out potentialRegistryFunction);
         }
+
+        /// <summary>
+        /// Scan for the closing bracket that matches the one we've already skipped;
+        /// essentially, pushes and pops on a stack of parentheses to do this.
+        /// Takes the expression and the index to start at.
+        /// Returns the index of the matching parenthesis, or -1 if it was not found.
+        /// Note: This overload was created to prevent string allocations unless ABSOLUTELY necessary.
+        /// </summary>
         private static int ScanForClosingParenthesis(ReadOnlySpan<char> expression, int index)
         {
             bool potentialPropertyFunction = false;
@@ -4625,18 +4633,16 @@ namespace Microsoft.Build.Evaluation
 
                 // The binding flags that we will use for this function's execution
                 BindingFlags defaultBindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public;
-
-                ReadOnlySpan<char> expressionFunctionAsSpan = expressionFunction;
                 
-                ReadOnlySpan<char> expressionSubstringAsSpan = argumentStartIndex > -1 ? expressionFunctionAsSpan.Slice(methodStartIndex, argumentStartIndex - methodStartIndex) : ReadOnlySpan<char>.Empty;
+                ReadOnlySpan<char> expressionSubstring = argumentStartIndex > -1 ? expressionFunction.Slice(methodStartIndex, argumentStartIndex - methodStartIndex) : ReadOnlySpan<char>.Empty;
 
                 // There are arguments that need to be passed to the function
-                if (argumentStartIndex > -1 && !expressionSubstringAsSpan.Contains(".".AsSpan(), StringComparison.OrdinalIgnoreCase))
+                if (argumentStartIndex > -1 && !expressionSubstring.Contains(".".AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     ReadOnlySpan<char> argumentsContent;
 
                     // separate the function and the arguments
-                    functionName = expressionSubstringAsSpan.Trim();
+                    functionName = expressionSubstring.Trim();
 
                     // Skip the '('
                     argumentStartIndex++;
@@ -4674,7 +4680,7 @@ namespace Microsoft.Build.Evaluation
                             functionArguments = ExtractFunctionArguments(elementLocation, expressionFunction, argumentsContent);
                         }
 
-                        remainder = expressionFunctionAsSpan.Slice(argumentsEndIndex + 1).Trim();
+                        remainder = expressionFunction.Slice(argumentsEndIndex + 1).Trim();
                     }
                 }
                 else
@@ -4694,12 +4700,12 @@ namespace Microsoft.Build.Evaluation
                     if (nextMethodIndex > 0)
                     {
                         methodLength = nextMethodIndex - methodStartIndex;
-                        remainder = expressionFunctionAsSpan.Slice(nextMethodIndex).Trim();
+                        remainder = expressionFunction.Slice(nextMethodIndex).Trim();
                     }
 
-                    ReadOnlySpan<char> netPropertyName = expressionFunctionAsSpan.Slice(methodStartIndex, methodLength).Trim();
+                    ReadOnlySpan<char> netPropertyName = expressionFunction.Slice(methodStartIndex, methodLength).Trim();
 
-                    ProjectErrorUtilities.VerifyThrowInvalidProject(netPropertyName.Length > 0, elementLocation, "InvalidFunctionPropertyExpression", expressionFunction.ToString(), String.Empty);
+                    ProjectErrorUtilities.VerifyThrowInvalidProject(netPropertyName.Length > 0, elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, string.Empty);
 
                     // We have been asked for a property or a field
                     defaultBindingFlags |= (BindingFlags.GetProperty | BindingFlags.GetField);

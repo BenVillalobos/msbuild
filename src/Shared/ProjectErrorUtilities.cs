@@ -177,6 +177,27 @@ namespace Microsoft.Build.Shared
         }
 
         /// <summary>
+        /// Overload for one ReadOnlySpan<char> and one string argument.
+        /// NOTE: This overload is specifically created to prevent string allocations unless ABSOLUTELY necessary.
+        /// </summary>
+        /// <param name="condition">The condition to check.</param>
+        /// <param name="elementLocation">The <see cref="IElementLocation"/> of the element.</param>
+        /// <param name="resourceName">The resource string for the error message.</param>
+        /// <param name="arg0"></param>
+        /// <param name="arg1"></param>
+        internal static void VerifyThrowInvalidProject
+        (
+            bool condition,
+            IElementLocation elementLocation,
+            string resourceName,
+            ReadOnlySpan<char> arg0,
+            string arg1
+        )
+        {
+            VerifyThrowInvalidProject(condition, null, elementLocation, resourceName, arg0, arg1);
+        }
+
+        /// <summary>
         /// Overload for three string format arguments.
         /// </summary>
         /// <param name="condition">The condition to check.</param>
@@ -301,6 +322,36 @@ namespace Microsoft.Build.Shared
             if (!condition)
             {
                 ThrowInvalidProject(errorSubCategoryResourceName, elementLocation, resourceName, arg0, arg1);
+            }
+        }
+
+        /// <summary>
+        /// Overload for one ReadOnlySpan<char> argument and one string argument.
+        /// NOTE: This overload is specifically created to prevent string allocations unless ABSOLUTELY necessary.
+        /// </summary>
+        /// <param name="condition">The condition to check.</param>
+        /// <param name="errorSubCategoryResourceName">The resource string for the
+        /// error sub-category (can be null).</param>
+        /// <param name="elementLocation">The <see cref="IElementLocation"/> of the element.</param>
+        /// <param name="resourceName">The resource string for the error message.</param>
+        /// <param name="arg0"></param>
+        /// <param name="arg1"></param>
+        internal static void VerifyThrowInvalidProject
+        (
+            bool condition,
+            string errorSubCategoryResourceName,
+            IElementLocation elementLocation,
+            string resourceName,
+            ReadOnlySpan<char> arg0,
+            string arg1
+        )
+        {
+            // PERF NOTE: check the condition here instead of pushing it into
+            // the ThrowInvalidProject() method, because that method always
+            // allocates memory for its variable array of arguments
+            if (!condition)
+            {
+                ThrowInvalidProject(errorSubCategoryResourceName, elementLocation, resourceName, arg0.ToString(), arg1);
             }
         }
 
