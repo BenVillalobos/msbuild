@@ -489,83 +489,6 @@ namespace Microsoft.Build.Evaluation
             return ScanForClosingParenthesis(expression, index, out potentialPropertyFunction, out potentialRegistryFunction);
         }
 
-        private static int ScanForClosingParenthesis(ReadOnlySpan<char> expression, int index, out bool potentialPropertyFunction, out bool potentialRegistryFunction)
-        {
-            int nestLevel = 1;
-            int length = expression.Length;
-
-            potentialPropertyFunction = false;
-            potentialRegistryFunction = false;
-
-            unsafe
-            {
-                fixed (char* pchar = expression)
-                {
-                    // Scan for our closing ')'
-                    while (index < length && nestLevel > 0)
-                    {
-                        char character = pchar[index];
-
-                        if (character == '\'' || character == '`' || character == '"')
-                        {
-                            index++;
-                            index = ScanForClosingQuote(character, expression, index);
-
-                            if (index < 0)
-                            {
-                                return -1;
-                            }
-                        }
-                        else if (character == '(')
-                        {
-                            nestLevel++;
-                        }
-                        else if (character == ')')
-                        {
-                            nestLevel--;
-                        }
-                        else if (character == '.' || character == '[' || character == '$')
-                        {
-                            potentialPropertyFunction = true;
-                        }
-                        else if (character == ':')
-                        {
-                            potentialRegistryFunction = true;
-                        }
-
-                        index++;
-                    }
-                }
-            }
-
-            // We will have parsed past the ')', so step back one character
-            index--;
-
-            return (nestLevel == 0) ? index : -1;
-        }
-
-        private static int ScanForClosingQuote(char quoteChar, ReadOnlySpan<char> expression, int index)
-        {
-            unsafe
-            {
-                fixed (char* pchar = expression)
-                {
-                    // Scan for our closing quoteChar
-                    while (index < expression.Length)
-                    {
-                        if (pchar[index] == quoteChar)
-                        {
-                            return index;
-                        }
-
-                        index++;
-                    }
-                }
-            }
-
-            return -1;
-        }
-
         private static string[] ExtractFunctionArguments(IElementLocation elementLocation, ReadOnlySpan<char> expressionFunction, ReadOnlySpan<char> argumentsString)
         {
             int argumentsContentLength = argumentsString.Length;
@@ -702,9 +625,99 @@ namespace Microsoft.Build.Evaluation
         }
 
         /// <summary>
+        /// Scan for the closing bracket that matches the one we've already skipped;
+        /// essentially, pushes and pops on a stack of parentheses to do this.
+        /// Takes the expression and the index to start at.
+        /// Returns the index of the matching parenthesis, or -1 if it was not found.
+        /// Also returns flags to indicate if a propertyfunction or registry property is likely
+        /// to be found in the expression
+        /// Note: This overload was created to prevent string allocations unless ABSOLUTELY necessary.
+        /// </summary>
+        private static int ScanForClosingParenthesis(ReadOnlySpan<char> expression, int index, out bool potentialPropertyFunction, out bool potentialRegistryFunction)
+        {
+            int nestLevel = 1;
+            int length = expression.Length;
+
+            potentialPropertyFunction = false;
+            potentialRegistryFunction = false;
+
+            unsafe
+            {
+                fixed (char* pchar = expression)
+                {
+                    // Scan for our closing ')'
+                    while (index < length && nestLevel > 0)
+                    {
+                        char character = pchar[index];
+
+                        if (character == '\'' || character == '`' || character == '"')
+                        {
+                            index++;
+                            index = ScanForClosingQuote(character, expression, index);
+
+                            if (index < 0)
+                            {
+                                return -1;
+                            }
+                        }
+                        else if (character == '(')
+                        {
+                            nestLevel++;
+                        }
+                        else if (character == ')')
+                        {
+                            nestLevel--;
+                        }
+                        else if (character == '.' || character == '[' || character == '$')
+                        {
+                            potentialPropertyFunction = true;
+                        }
+                        else if (character == ':')
+                        {
+                            potentialRegistryFunction = true;
+                        }
+
+                        index++;
+                    }
+                }
+            }
+
+            // We will have parsed past the ')', so step back one character
+            index--;
+
+            return (nestLevel == 0) ? index : -1;
+        }
+
+        /// <summary>
         /// Skip all characters until we find the matching quote character
         /// </summary>
         private static int ScanForClosingQuote(char quoteChar, string expression, int index)
+        {
+            unsafe
+            {
+                fixed (char* pchar = expression)
+                {
+                    // Scan for our closing quoteChar
+                    while (index < expression.Length)
+                    {
+                        if (pchar[index] == quoteChar)
+                        {
+                            return index;
+                        }
+
+                        index++;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// Skip all characters until we find the matching quote character
+        /// Note: This overload was created to prevent string allocations unless ABSOLUTELY necessary.
+        /// </summary>
+        private static int ScanForClosingQuote(char quoteChar, ReadOnlySpan<char> expression, int index)
         {
             unsafe
             {
@@ -4577,6 +4590,49 @@ namespace Microsoft.Build.Evaluation
             /// Extracts the name, arguments, binding flags, and invocation type for an indexer
             /// Also extracts the remainder of the expression that is not part of this indexer
             /// </summary>
+            private static void ConstructIndexerFunction(string expressionFunction, IElementLocation elementLocation, object propertyValue, int methodStartIndex, int indexerEndIndex, ref FunctionBuilder<T> functionBuilder)
+            {
+                string argumentsContent = expressionFunction.Substring(1, indexerEndIndex - 1);
+                string remainder = expressionFunction.Substring(methodStartIndex);
+                string functionName;
+                string[] functionArguments;
+
+                // If there are no arguments, then just create an empty array
+                if (String.IsNullOrEmpty(argumentsContent))
+                {
+                    functionArguments = Array.Empty<string>();
+                }
+                else
+                {
+                    // We will keep empty entries so that we can treat them as null
+                    functionArguments = ExtractFunctionArguments(elementLocation, expressionFunction, argumentsContent);
+                }
+
+                // choose the name of the function based on the type of the object that we
+                // are using.
+                if (propertyValue is Array)
+                {
+                    functionName = "GetValue";
+                }
+                else if (propertyValue is string)
+                {
+                    functionName = "get_Chars";
+                }
+                else // a regular indexer
+                {
+                    functionName = "get_Item";
+                }
+
+                functionBuilder.Name = functionName;
+                functionBuilder.Arguments = functionArguments;
+                functionBuilder.BindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.InvokeMethod;
+                functionBuilder.Remainder = remainder;
+            }
+
+            /// <summary>
+            /// Extracts the name, arguments, binding flags, and invocation type for an indexer
+            /// Also extracts the remainder of the expression that is not part of this indexer
+            /// </summary>
             private static void ConstructIndexerFunction(ReadOnlySpan<char> expressionFunction, IElementLocation elementLocation, object propertyValue, int methodStartIndex, int indexerEndIndex, ref FunctionBuilder<T> functionBuilder)
             {
                 ReadOnlySpan<char> argumentsContent = expressionFunction.Slice(1, indexerEndIndex - 1);
@@ -4614,6 +4670,120 @@ namespace Microsoft.Build.Evaluation
                 functionBuilder.Arguments = functionArguments;
                 functionBuilder.BindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public | BindingFlags.InvokeMethod;
                 functionBuilder.Remainder = remainder.ToString();
+            }
+
+            /// <summary>
+            /// Extracts the name, arguments, binding flags, and invocation type for a static or instance function.
+            /// Also extracts the remainder of the expression that is not part of this function
+            /// </summary>
+            private static void ConstructFunction(IElementLocation elementLocation, string expressionFunction, int argumentStartIndex, int methodStartIndex, ref FunctionBuilder<T> functionBuilder)
+            {
+                // The unevaluated and unexpanded arguments for this function
+                string[] functionArguments;
+
+                // The name of the function that will be invoked
+                ReadOnlySpan<char> functionName;
+
+                // What's left of the expression once the function has been constructed
+                ReadOnlySpan<char> remainder = ReadOnlySpan<char>.Empty;
+
+                // The binding flags that we will use for this function's execution
+                BindingFlags defaultBindingFlags = BindingFlags.IgnoreCase | BindingFlags.Public;
+
+                ReadOnlySpan<char> expressionFunctionAsSpan = expressionFunction.AsSpan();
+
+                ReadOnlySpan<char> expressionSubstringAsSpan = argumentStartIndex > -1 ? expressionFunctionAsSpan.Slice(methodStartIndex, argumentStartIndex - methodStartIndex) : ReadOnlySpan<char>.Empty;
+
+                // There are arguments that need to be passed to the function
+                if (argumentStartIndex > -1 && !expressionSubstringAsSpan.Contains(".".AsSpan(), StringComparison.OrdinalIgnoreCase))
+                {
+                    string argumentsContent;
+
+                    // separate the function and the arguments
+                    functionName = expressionSubstringAsSpan.Trim();
+
+                    // Skip the '('
+                    argumentStartIndex++;
+
+                    // Scan for the matching closing bracket, skipping any nested ones
+                    int argumentsEndIndex = ScanForClosingParenthesis(expressionFunction, argumentStartIndex);
+
+                    if (argumentsEndIndex == -1)
+                    {
+                        ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, AssemblyResources.GetString("InvalidFunctionPropertyExpressionDetailMismatchedParenthesis"));
+                    }
+
+                    // We have been asked for a method invocation
+                    defaultBindingFlags |= BindingFlags.InvokeMethod;
+
+                    // It may be that there are '()' but no actual arguments content
+                    if (argumentStartIndex == expressionFunction.Length - 1)
+                    {
+                        argumentsContent = String.Empty;
+                        functionArguments = Array.Empty<string>();
+                    }
+                    else
+                    {
+                        // we have content within the '()' so let's extract and deal with it
+                        argumentsContent = expressionFunction.Substring(argumentStartIndex, argumentsEndIndex - argumentStartIndex);
+
+                        // If there are no arguments, then just create an empty array
+                        if (String.IsNullOrEmpty(argumentsContent))
+                        {
+                            functionArguments = Array.Empty<string>();
+                        }
+                        else
+                        {
+                            // We will keep empty entries so that we can treat them as null
+                            functionArguments = ExtractFunctionArguments(elementLocation, expressionFunction, argumentsContent);
+                        }
+
+                        remainder = expressionFunctionAsSpan.Slice(argumentsEndIndex + 1).Trim();
+                    }
+                }
+                else
+                {
+                    int nextMethodIndex = expressionFunction.IndexOf('.', methodStartIndex);
+                    int methodLength = expressionFunction.Length - methodStartIndex;
+                    int indexerIndex = expressionFunction.IndexOf('[', methodStartIndex);
+
+                    // We don't want to consume the indexer
+                    if (indexerIndex >= 0 && indexerIndex < nextMethodIndex)
+                    {
+                        nextMethodIndex = indexerIndex;
+                    }
+
+                    functionArguments = Array.Empty<string>();
+
+                    if (nextMethodIndex > 0)
+                    {
+                        methodLength = nextMethodIndex - methodStartIndex;
+                        remainder = expressionFunctionAsSpan.Slice(nextMethodIndex).Trim();
+                    }
+
+                    ReadOnlySpan<char> netPropertyName = expressionFunctionAsSpan.Slice(methodStartIndex, methodLength).Trim();
+
+                    ProjectErrorUtilities.VerifyThrowInvalidProject(netPropertyName.Length > 0, elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+
+                    // We have been asked for a property or a field
+                    defaultBindingFlags |= (BindingFlags.GetProperty | BindingFlags.GetField);
+
+                    functionName = netPropertyName;
+                }
+
+                // either there are no functions left or what we have is another function or an indexer
+                if (remainder.IsEmpty || remainder[0] == '.' || remainder[0] == '[')
+                {
+                    functionBuilder.Name = functionName.ToString();
+                    functionBuilder.Arguments = functionArguments;
+                    functionBuilder.BindingFlags = defaultBindingFlags;
+                    functionBuilder.Remainder = remainder.ToString();
+                }
+                else
+                {
+                    // We ended up with something other than a function expression
+                    ProjectErrorUtilities.ThrowInvalidProject(elementLocation, "InvalidFunctionPropertyExpression", expressionFunction, String.Empty);
+                }
             }
 
             /// <summary>
