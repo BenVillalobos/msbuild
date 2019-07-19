@@ -444,6 +444,27 @@ namespace Microsoft.Build.Evaluation
         /// <summary>
         /// Returns true if the supplied string contains a valid property name
         /// </summary>
+        private static bool IsValidPropertyName(string propertyName)
+        {
+            if (propertyName.Length == 0 || !XmlUtilities.IsValidInitialElementNameCharacter(propertyName[0]))
+            {
+                return false;
+            }
+
+            for (int n = 1; n < propertyName.Length; n++)
+            {
+                if (!XmlUtilities.IsValidSubsequentElementNameCharacter(propertyName[n]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if the supplied string contains a valid property name
+        /// </summary>
         private static bool IsValidPropertyName(ReadOnlySpan<char> propertyName)
         {
             if (propertyName.Length == 0 || !XmlUtilities.IsValidInitialElementNameCharacter(propertyName[0]))
@@ -1247,11 +1268,11 @@ namespace Microsoft.Build.Evaluation
                         }
                         else if (tryExtractPropertyFunction)
                         {
-                            propertyBody = expression.Substring(propertyStartIndex + 2, propertyEndIndex - propertyStartIndex - 2);
+                            //propertyBody = expression.Substring(propertyStartIndex + 2, propertyEndIndex - propertyStartIndex - 2);
 
                             // This is likely to be a function expression
                             propertyValue = ExpandPropertyBody(
-                                propertyBody.AsSpan(),
+                                expression.AsSpan(propertyStartIndex + 2, propertyEndIndex - propertyStartIndex - 2),
                                 null,
                                 properties,
                                 options,
@@ -1338,8 +1359,8 @@ namespace Microsoft.Build.Evaluation
                 IFileSystem fileSystem)
             {
                 Function<T> function = null;
+                // todo: find way around this allocation via debug.
                 string propertyName = propertyBody.ToString();
-                ReadOnlySpan<char> bodyAsSpan = propertyBody;
 
                 // Trim the body for compatibility reasons:
                 // Spaces are not valid property name chars, but $( Foo ) is allowed, and should always expand to BLANK.
@@ -1348,7 +1369,6 @@ namespace Microsoft.Build.Evaluation
                 if (Char.IsWhiteSpace(propertyBody[0]) || Char.IsWhiteSpace(propertyBody[propertyBody.Length - 1]))
                 {
                     propertyBody = propertyBody.Trim();
-                    bodyAsSpan = bodyAsSpan.Trim();
                 }
 
                 // If we don't have a clean propertybody then we'll do deeper checks to see
@@ -1397,11 +1417,10 @@ namespace Microsoft.Build.Evaluation
                         else
                         {
                             propertyValue = LookupProperty(properties, propertyBody.ToString(), 0, indexerStart - 1, elementLocation, usedUninitializedProperties);
-                            propertyBody = propertyBody.Slice(indexerStart);
 
                             // recurse so that the function representing the indexer can be executed on the property value
                             return ExpandPropertyBody(
-                                propertyBody,
+                                propertyBody.Slice(indexerStart),
                                 propertyValue,
                                 properties,
                                 options,
