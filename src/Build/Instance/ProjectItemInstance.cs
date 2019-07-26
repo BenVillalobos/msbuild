@@ -811,7 +811,7 @@ namespace Microsoft.Build.Execution
                 _itemDefinitions = itemDefinitions;
                 _projectDirectory = projectDirectory;
                 _isImmutable = immutable;
-                _definingFileEscaped = definingFileEscaped;
+                _definingFileEscaped = OpportunisticIntern.InternStringIfPossible(definingFileEscaped);
             }
 
             /// <summary>
