@@ -3142,7 +3142,7 @@ namespace Microsoft.Build.Evaluation
                 // A static method is the content that follows the last "::", the rest being the type
                 if (propertyValue == null && expressionRoot[0] == '[')
                 {
-                    var typeEndIndex = expressionFunction.IndexOf(']', 1);
+                    var typeEndIndex = expressionRoot.Slice(1).IndexOf(']');
 
                     if (typeEndIndex < 1)
                     {
