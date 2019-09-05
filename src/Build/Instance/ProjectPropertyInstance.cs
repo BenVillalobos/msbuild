@@ -31,6 +31,11 @@ namespace Microsoft.Build.Execution
         private string _escapedValue;
 
         /// <summary>
+        /// Non-Escaped value. Cached only when needed.
+        /// </summary>
+        private string _unescapedValue;
+
+        /// <summary>
         /// Private constructor
         /// </summary>
         private ProjectPropertyInstance(string name, string escapedValue)
@@ -59,7 +64,12 @@ namespace Microsoft.Build.Execution
             [DebuggerStepThrough]
             get
             {
-                return EscapingUtilities.UnescapeAll(_escapedValue);
+                if(_unescapedValue == null)
+                {
+                    _unescapedValue = EscapingUtilities.UnescapeAll(_escapedValue);
+                }
+                //Cache this value in case get is called multiple times.
+                return _unescapedValue;
             }
 
             [DebuggerStepThrough]
@@ -67,7 +77,8 @@ namespace Microsoft.Build.Execution
             {
                 ProjectInstance.VerifyThrowNotImmutable(IsImmutable);
                 ErrorUtilities.VerifyThrowArgumentNull(value, nameof(value));
-                _escapedValue = EscapingUtilities.Escape(value);
+                _unescapedValue = value;
+                _escapedValue = EscapingUtilities.Escape(_unescapedValue);
             }
         }
 
