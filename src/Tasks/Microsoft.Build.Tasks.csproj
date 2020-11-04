@@ -56,6 +56,9 @@
     <Compile Include="..\Shared\AssemblyNameReverseVersionComparer.cs">
       <Link>AssemblyDependency\AssemblyNameReverseVersionComparer.cs</Link>
     </Compile>
+    <Compile Include="..\Shared\ChangeWaves.cs">
+      <Link>SharedUtilities\ChangeWaves.cs</Link>
+    </Compile>
     <Compile Include="..\Shared\CanonicalError.cs">
       <Link>CanonicalError.cs</Link>
       <ExcludeFromStyleCop>True</ExcludeFromStyleCop>
@@ -81,7 +84,7 @@
     <Compile Include="..\Shared\NGen.cs">
       <Link>NGen.cs</Link>
     </Compile>
-    <Compile Include="..\Shared\IConstrainedEqualityComparer.cs"/>
+    <Compile Include="..\Shared\IConstrainedEqualityComparer.cs" />
     <Compile Include="..\Shared\IInternable.cs">
       <Link>IInternable.cs</Link>
     </Compile>
@@ -547,6 +550,7 @@
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
     </Compile>
     <Compile Include="Unzip.cs" />
+    <Compile Include="ValidateChangeWaves.cs" />
     <Compile Include="VisualBasicParserUtilities.cs">
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
     </Compile>
