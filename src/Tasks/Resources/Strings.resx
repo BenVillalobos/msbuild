@@ -2857,6 +2857,18 @@
     <value>MSB3965: No output path specified in build settings.</value>
     <comment>{StrBegin="MSB3965: "}</comment>
   </data>
+
+  <!--
+        MSB4271 - MSB4280   Task: ValidateChangeWavess
+  -->
+  <data name="ChangeWave_InvalidFormat" xml:space="preserve">
+    <value>MSB4271: Environment variable MSBUILDDISABLEFEATURESFROMVERSION is set to an invalid format. Enabling all change wave versions. Entered value: {0}.</value>
+    <comment>{StrBegin="MSB4271: "}UE: Value should be of the format: xx.yy</comment>
+  </data>
+  <data name="ChangeWave_OutOfRotation" xml:space="preserve">
+    <value>MSB4272: Environment variable MSBUILDDISABLEFEATURESFROMVERSION is set to a version that is out of rotation. Defaulting to Change Wave version: {0}. Entered value: {1}.</value>
+    <comment>{StrBegin="MSB4272: "}</comment>
+  </data>
   <!--
         The tasks message bucket is: MSB3001 - MSB3999
 
@@ -2943,6 +2955,9 @@
             MSB3961 - MSB3970   Task: GenerateLauncher
 
             MSB4000 - MSB4200   Portable targets & tasks (vsproject\flavors\portable\msbuild)
+            
+            MSB4271 - MSB4280   Task: ValidateChangeWaves
+            
             MSB9000 - MSB9900   MSBuild targets files (C++)
 
         The following codes are not longer used but have shipped so should not be reused:
