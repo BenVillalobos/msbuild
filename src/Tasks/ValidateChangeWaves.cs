@@ -18,10 +18,10 @@ namespace Microsoft.Build.Tasks
             switch (ChangeWaves.ConversionState)
             {
                 case ChangeWaves.ChangeWaveConversionState.InvalidFormat:
-                    Log.LogWarningFromResources("ChangeWave_InvalidFormat", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
+                    Log.LogWarningWithCodeFromResources("ChangeWave_InvalidFormat", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
                 case ChangeWaves.ChangeWaveConversionState.OutOfRotation:
-                    Log.LogWarningFromResources("ChangeWave_OutOfRotation", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
+                    Log.LogWarningWithCodeFromResources("ChangeWave_OutOfRotation", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
             }
 
