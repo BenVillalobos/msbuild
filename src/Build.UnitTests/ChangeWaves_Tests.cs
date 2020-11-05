@@ -85,24 +85,6 @@ namespace Microsoft.Build.Engine.UnitTests
             }
         }
 
-        //[Theory]
-        //[InlineData("test")]
-        //[InlineData("    ")]
-        //[InlineData("")]
-        //[InlineData("16-7")]
-        //[InlineData("16x7")]
-        //[InlineData("16=7")]
-        //public void InvalidCallerForIsFeatureEnabledThrows(string featureWave)
-        //{
-        //    using (TestEnvironment env = TestEnvironment.Create())
-        //    {
-        //        Version featureVersion = Version.Parse(featureWave);
-        //        env.SetChangeWave(featureWave);
-        //        BuildEnvironmentHelper.ResetInstance_ForUnitTestsOnly();
-        //        Shouldly.Should.Throw<InternalErrorException>(() => ChangeWaves.AreFeaturesEnabled(featureVersion));
-        //    }
-        //}
-
         [Theory]
         [InlineData("test", "16.8")]
         [InlineData("16_8", "5.7")]
