@@ -21,7 +21,7 @@ namespace Microsoft.Build.Tasks
                     Log.LogWarningWithCodeFromResources("ChangeWave_InvalidFormat", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
                 case ChangeWaves.ChangeWaveConversionState.OutOfRotation:
-                    Log.LogWarningWithCodeFromResources("ChangeWave_OutOfRotation", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
+                    Log.LogWarningWithCodeFromResources("ChangeWave_OutOfRotation", ChangeWaves.DisabledWave, Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
             }
 

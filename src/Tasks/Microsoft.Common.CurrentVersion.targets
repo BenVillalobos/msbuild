@@ -1132,6 +1132,20 @@ Copyright (C) Microsoft Corporation. All rights reserved.
 
   <!--
     ============================================================
+                                        ValidateChangeWaves
+
+    Check the 'MSBuildDisableFeaturesFromVersion' environment variable
+    and throw a warning if it is set to some invalid value.
+    ============================================================
+    -->
+  <Target
+    Name="ValidateChangeWaves"
+    AfterTargets="Build">
+    <ValidateChangeWaves/>
+  </Target>
+
+  <!--
+    ============================================================
                                         GetFrameworkPaths
 
     Get the paths for the .NET Framework installation directory
