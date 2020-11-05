@@ -1,5 +1,19 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
+namespace Microsoft.Build
+{
+    public partial class ChangeWaves
+    {
+        public static readonly System.Version[] AllWaves;
+        public static readonly System.Version Wave16_10;
+        public static readonly System.Version Wave16_8;
+        public static readonly System.Version Wave17_0;
+        public ChangeWaves() { }
+        public static System.Version DisabledWave { get { throw null; } }
+        public static bool AreFeaturesEnabled(System.Version wave) { throw null; }
+        public static void ResetStateForTests() { }
+    }
+}
 namespace Microsoft.Build.Construction
 {
     public abstract partial class ElementLocation
@@ -2046,19 +2060,5 @@ namespace Microsoft.Build.ObjectModelRemoting
         public string LocalName { get { throw null; } }
         public string NamespaceURI { get { throw null; } }
         public string Value { get { throw null; } }
-    }
-}
-namespace Microsoft.Build.Utilities
-{
-    public partial class ChangeWaves
-    {
-        public static readonly System.Version[] AllWaves;
-        public static readonly System.Version Wave16_10;
-        public static readonly System.Version Wave16_8;
-        public static readonly System.Version Wave17_0;
-        public ChangeWaves() { }
-        public static System.Version DisabledWave { get { throw null; } }
-        public static bool AreFeaturesEnabled(System.Version wave) { throw null; }
-        public static void ResetStateForTests() { }
     }
 }

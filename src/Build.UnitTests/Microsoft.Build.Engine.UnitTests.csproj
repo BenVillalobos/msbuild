@@ -47,6 +47,9 @@
     <Compile Include="..\Shared\FxCopExclusions\Microsoft.Build.Shared.Suppressions.cs">
       <ExcludeFromStyleCop>true</ExcludeFromStyleCop>
     </Compile>
+    <Compile Include="..\Shared\ChangeWaves.cs">
+      <Link>SharedUtilities\ChangeWaves.cs</Link>
+    </Compile>
     
     <Compile Remove="Definition\ToolsetConfigurationReaderTestHelper.cs" />
     <Compile Include="Definition\ToolsetConfigurationReaderTestHelper.cs" Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'" />

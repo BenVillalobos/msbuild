@@ -35,6 +35,9 @@
     <Compile Include="..\Shared\UnitTests\TestEnvironment.cs">
       <Link>TestEnvironment.cs</Link>
     </Compile>
+    <Compile Include="..\Shared\ChangeWaves.cs">
+      <Link>SharedUtilities\ChangeWaves.cs</Link>
+    </Compile>
     <Compile Include="..\Shared\StringExtensions.cs" />
     <Compile Include="..\Build\BackEnd\Node\NativeMethods.cs">
       <Link>NativeMethods.cs</Link>

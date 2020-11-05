@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using Microsoft.Build.Utilities;
 using System;
 using System.Linq;
 
-namespace Microsoft.Build.Utilities
+#if BUILD_ENGINE
+namespace Microsoft.Build
+#else
+namespace MSBuildChangeWaves
+#endif
 {
     internal enum ChangeWaveConversionState
     {
