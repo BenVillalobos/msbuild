@@ -11,22 +11,22 @@ namespace Microsoft.Build
 namespace MSBuildChangeWaves
 #endif
 {
-    internal enum ChangeWaveConversionState
-    {
-        NotConvertedYet,
-        Valid,
-        InvalidFormat,
-        OutOfRotation
-    }
-
     /// <summary>
     /// Coupled together with the MSBUILDDISABLEFEATURESFROMVERSION environment variable,
     /// this class acts as a way to make risky changes while giving customers an opt-out.
+    /// </summary>
     /// See docs here: https://github.com/dotnet/msbuild/blob/master/documentation/wiki/ChangeWaves.md
     /// For dev docs: https://github.com/dotnet/msbuild/blob/master/documentation/wiki/ChangeWaves-Dev.md
-    /// </summary>
     public class ChangeWaves
     {
+        internal enum ChangeWaveConversionState
+        {
+            NotConvertedYet,
+            Valid,
+            InvalidFormat,
+            OutOfRotation
+        }
+
         public static readonly Version Wave16_8 = new Version(16, 8);
         public static readonly Version Wave16_10 = new Version(16, 10);
         public static readonly Version Wave17_0 = new Version(17, 0);
@@ -126,14 +126,14 @@ namespace MSBuildChangeWaves
             if (string.IsNullOrEmpty(Traits.Instance.MSBuildDisableFeaturesFromVersion))
             {
                 ConversionState = ChangeWaveConversionState.Valid;
-                _cachedWave = ChangeWaves.EnableAllFeatures;
+                _cachedWave = EnableAllFeatures;
                 return;
             }
             // If _cachedWave hasn't been set yet, try to parse it
             else if (_cachedWave == null && !Version.TryParse(Traits.Instance.MSBuildDisableFeaturesFromVersion, out _cachedWave))
             {
                 ConversionState = ChangeWaveConversionState.InvalidFormat;
-                _cachedWave = ChangeWaves.EnableAllFeatures;
+                _cachedWave = EnableAllFeatures;
                 return;
             }
             // Are we enabling everything, or do we have a valid wave?

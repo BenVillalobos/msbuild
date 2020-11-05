@@ -2202,6 +2202,20 @@ namespace Microsoft.Build.Tasks.Hosting
         bool Compile();
     }
 }
+namespace MSBuildChangeWaves
+{
+    public partial class ChangeWaves
+    {
+        public static readonly System.Version[] AllWaves;
+        public static readonly System.Version Wave16_10;
+        public static readonly System.Version Wave16_8;
+        public static readonly System.Version Wave17_0;
+        public ChangeWaves() { }
+        public static System.Version DisabledWave { get { throw null; } }
+        public static bool AreFeaturesEnabled(System.Version wave) { throw null; }
+        public static void ResetStateForTests() { }
+    }
+}
 namespace System.Deployment.Internal.CodeSigning
 {
     public sealed partial class RSAPKCS1SHA256SignatureDescription : System.Security.Cryptography.SignatureDescription

@@ -381,10 +381,10 @@ namespace Microsoft.Build.Execution
 
             switch (ChangeWaves.ConversionState)
             {
-                case ChangeWaveConversionState.InvalidFormat:
+                case ChangeWaves.ChangeWaveConversionState.InvalidFormat:
                     log.LogWarning(BuildEventContext.Invalid, "", new BuildEventFileInfo(""), "ChangeWave_InvalidFormat", Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
-                case ChangeWaveConversionState.OutOfRotation:
+                case ChangeWaves.ChangeWaveConversionState.OutOfRotation:
                     log.LogWarning(BuildEventContext.Invalid, "", new BuildEventFileInfo(""), "ChangeWave_OutOfRotation", ChangeWaves.DisabledWave, Traits.Instance.MSBuildDisableFeaturesFromVersion, $"[{String.Join(", ", ChangeWaves.AllWaves.Select(x => x.ToString()))}]");
                     break;
             }
