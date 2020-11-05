@@ -33,7 +33,7 @@ namespace Microsoft.Build.Engine.UnitTests
             using (TestEnvironment env = TestEnvironment.Create())
             {
                 Version featureAsVersion = Version.Parse(featureVersion);
-                env.SetChangeWave(ChangeWaves.EnableAllFeatures.ToString());
+                env.SetChangeWave(ChangeWaves.EnableAllFeatures);
                 ChangeWaves.AreFeaturesEnabled(featureAsVersion).ShouldBe(true);
 
                 string projectFile = $"" +
