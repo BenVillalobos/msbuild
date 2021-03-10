@@ -892,7 +892,10 @@ namespace Microsoft.Build.UnitTests
         {
             Assert.Throws<IOException>(() =>
             {
-                FileUtilities.GetTemporaryFile("|", ".tmp");
+                FileUtilities.GetTemporaryFile(extension: ".tmp",
+                                               directory: null,
+                                               createFile: true,
+                                               subfolder: "|");
             }
            );
         }

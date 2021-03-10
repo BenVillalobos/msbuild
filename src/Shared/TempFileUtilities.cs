@@ -19,9 +19,10 @@ namespace Microsoft.Build.Shared
         /// Caller must delete when finished.
         /// </summary>
         /// <param name="createDirectory"></param>
-        internal static string GetTemporaryDirectory(bool createDirectory = true)
+        /// <param name="subfolder"></param>
+        internal static string GetTemporaryDirectory(bool createDirectory = true, string subfolder = null)
         {
-            string temporaryDirectory = Path.Combine(Path.GetTempPath(), "Temporary" + Guid.NewGuid().ToString("N"));
+            string temporaryDirectory = Path.Combine(Path.GetTempPath(), "Temporary" + Guid.NewGuid().ToString("N"), subfolder ?? string.Empty);
 
             if (createDirectory)
             {
@@ -40,7 +41,9 @@ namespace Microsoft.Build.Shared
         /// </summary>
         internal static string GetTemporaryFileName(string extension)
         {
-            return GetTemporaryFile(null, extension, false);
+            return GetTemporaryFile(extension: extension,
+                                    directory: null,
+                                    createFile: false);
         }
 
         /// <summary>
@@ -51,7 +54,7 @@ namespace Microsoft.Build.Shared
         /// </summary>
         internal static string GetTemporaryFile()
         {
-            return GetTemporaryFile(".tmp");
+            return GetTemporaryFile(extension: ".tmp");
         }
 
         /// <summary>
@@ -63,18 +66,21 @@ namespace Microsoft.Build.Shared
         /// </summary>
         internal static string GetTemporaryFile(string extension)
         {
-            return GetTemporaryFile(null, extension);
+            return GetTemporaryFile(extension: extension,
+                                    directory: null,
+                                    createFile: true,
+                                    subfolder: null);
         }
 
         /// <summary>
         /// Creates a file with unique temporary file name with a given extension in the specified folder.
         /// File is guaranteed to be unique.
         /// Extension may have an initial period.
-        /// If folder is null, the temporary folder will be used.
+        /// If folder is null, a folder named MSBuild will be created inside the temp directory.
         /// Caller must delete it when finished.
         /// May throw IOException.
         /// </summary>
-        internal static string GetTemporaryFile(string directory, string extension, bool createFile = true)
+        internal static string GetTemporaryFile(string extension, string directory = null, bool createFile = true, string subfolder = null)
         {
             ErrorUtilities.VerifyThrowArgumentLengthIfNotNull(directory, nameof(directory));
             ErrorUtilities.VerifyThrowArgumentLength(extension, nameof(extension));
@@ -86,9 +92,7 @@ namespace Microsoft.Build.Shared
 
             try
             {
-                directory ??= Path.GetTempPath();
-
-                Directory.CreateDirectory(directory);
+                directory ??= GetTemporaryDirectory(true, subfolder);
 
                 string file = Path.Combine(directory, $"tmp{Guid.NewGuid():N}{extension}");
 

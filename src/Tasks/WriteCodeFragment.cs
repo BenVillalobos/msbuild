@@ -101,7 +101,10 @@ namespace Microsoft.Build.Tasks
                     OutputFile = new TaskItem(Path.Combine(OutputDirectory.ItemSpec, OutputFile.ItemSpec));
                 }
 
-                OutputFile ??= new TaskItem(FileUtilities.GetTemporaryFile(OutputDirectory.ItemSpec, extension));
+                OutputFile ??= new TaskItem(FileUtilities.GetTemporaryFile(extension: extension,
+                                                                           directory: OutputDirectory.ItemSpec,
+                                                                           createFile: true,
+                                                                           subfolder: null));
 
                 File.WriteAllText(OutputFile.ItemSpec, code); // Overwrites file if it already exists (and can be overwritten)
             }

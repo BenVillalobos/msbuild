@@ -535,8 +535,12 @@ namespace Microsoft.Build.UnitTests
         {
             using (var env = TestEnvironment.Create())
             {
-                var sourceFile = FileUtilities.GetTemporaryFile(env.DefaultTestDirectory.Path, "src", false);
-                var destinationFile = FileUtilities.GetTemporaryFile(env.DefaultTestDirectory.Path, "dst", false);
+                var sourceFile = FileUtilities.GetTemporaryFile(extension: "src",
+                                                                directory: env.DefaultTestDirectory.Path,
+                                                                createFile: false);
+                var destinationFile = FileUtilities.GetTemporaryFile(extension: "dst",
+                                                                     directory: env.DefaultTestDirectory.Path,
+                                                                     createFile: false);
 
                 File.WriteAllText(sourceFile, "This is a source temp file.");
 

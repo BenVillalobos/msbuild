@@ -976,7 +976,10 @@ namespace Microsoft.Build.UnitTests.BackEnd
                 _testOutputHelper.WriteLine($"Created input file {inputTarget}");
                 File.SetLastWriteTime(inputTarget, targetWriteTime);
 
-                inputSymlink = FileUtilities.GetTemporaryFile(null, ".linkin", createFile: false);
+                inputSymlink = FileUtilities.GetTemporaryFile(extension: ".linkin",
+                                                              directory: null,
+                                                              createFile: false,
+                                                              subfolder: null);
 
                 if (!CreateSymbolicLink(inputSymlink, inputTarget, 0))
                 {

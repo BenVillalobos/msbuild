@@ -597,6 +597,7 @@ namespace Microsoft.Build.UnitTests.GenerateResource_Tests.InProc
 
             var firstResx = Utilities.WriteTestResX(false, null, null, _env.CreateFile(folder, ".resx").Path);
             var secondResx = Utilities.WriteTestResX(false, null, null, _env.CreateFile(folder, ".resx").Path);
+
             var cache = _env.GetTempFile(folder, ".cache").Path;
 
             GenerateResource createResources = Utilities.CreateTask(_output);

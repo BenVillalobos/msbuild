@@ -796,9 +796,7 @@ namespace Microsoft.Build.UnitTests
             {
                 if (s_tempProjectDir == null)
                 {
-                    s_tempProjectDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-
-                    Directory.CreateDirectory(s_tempProjectDir);
+                    s_tempProjectDir = FileUtilities.GetTemporaryDirectory(true);
                 }
 
                 return s_tempProjectDir;
